@@ -1,7 +1,11 @@
 from datetime import date, timedelta
+from typing import Tuple, Optional
+
 import pytest
 
-# from model import ...
+from exceptions import NotEnoughQuantityAllocationError, \
+    WrongSKUError, NotAllocatedOrderLineError, AlreadyAllocatedOrderLineError
+from model import Batch, OrderLine
 
 today = date.today()
 tomorrow = today + timedelta(days=1)
@@ -9,19 +13,61 @@ later = tomorrow + timedelta(days=10)
 
 
 def test_allocating_to_a_batch_reduces_the_available_quantity():
-    pytest.fail("todo")
+    batch, order_line = _make_equal_sku_line_and_batch("sku_1", 10, 2)
+    batch.allocate(order_line)
+
+    assert batch.available_quantity == 8
 
 
 def test_can_allocate_if_available_greater_than_required():
-    pytest.fail("todo")
+    batch, order_line = _make_equal_sku_line_and_batch("sku_1", 10, 2)
+    batch.allocate(order_line)
+
+    assert batch.available_quantity == 8
 
 
 def test_cannot_allocate_if_available_smaller_than_required():
-    pytest.fail("todo")
+    batch, order_line = _make_equal_sku_line_and_batch("sku_1", 2, 10)
+
+    with pytest.raises(NotEnoughQuantityAllocationError):
+        batch.allocate(order_line)
+        assert batch.available_quantity == 2
 
 
 def test_can_allocate_if_available_equal_to_required():
-    pytest.fail("todo")
+    batch, order_line = _make_equal_sku_line_and_batch("sku_1", 10, 10)
+    batch.allocate(order_line)
+
+    assert batch.available_quantity == 0
+
+
+def test_cannot_allocate_if_skus_do_not_match():
+    batch = Batch("batch_1", "sku_1", 10)
+    order_line = OrderLine("order_1", "wrond_sku", 10)
+
+    with pytest.raises(WrongSKUError):
+        batch.allocate(order_line)
+        assert batch.available_quantity == 10
+
+
+def test_can_only_deallocate_allocated_lines():
+    (
+        batch,
+        unallocated_order_line,
+    ) = _make_equal_sku_line_and_batch("sku_1", 10, 2)
+
+    with pytest.raises(NotAllocatedOrderLineError):
+        batch.deallocate(unallocated_order_line)
+        assert batch.available_quantity == 10
+
+
+def test_allocation_is_idempotent():
+    batch, order_line = _make_equal_sku_line_and_batch("sku_1", 10, 2)
+    batch.allocate(order_line)
+
+    with pytest.raises(AlreadyAllocatedOrderLineError):
+        batch.allocate(order_line)
+        assert batch.available_quantity == 8
 
 
 def test_prefers_warehouse_batches_to_shipments():
@@ -30,3 +76,14 @@ def test_prefers_warehouse_batches_to_shipments():
 
 def test_prefers_earlier_batches():
     pytest.fail("todo")
+
+
+def _make_equal_sku_line_and_batch(
+    sku: str,
+    batch_qty: int,
+    line_qty: int,
+    batch_eta: Optional[date] = None,
+) -> Tuple[Batch, OrderLine]:
+    batch = Batch("batch_1", sku, batch_qty, batch_eta)
+    order_line = OrderLine("order_1", sku, line_qty)
+    return batch, order_line
