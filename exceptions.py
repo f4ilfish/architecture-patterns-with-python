@@ -1,14 +1,20 @@
 
-class WrongSKUError(Exception):
+
+class AllocationError(Exception):
     pass
 
 
-class NotEnoughQuantityAllocationError(Exception):
+class WrongSKUError(AllocationError):
     pass
 
 
-class NotAllocatedOrderLineError(Exception):
+class NotEnoughQuantityAllocationError(AllocationError):
     pass
 
-class AlreadyAllocatedOrderLineError(Exception):
+
+class NotAllocatedOrderLineError(AllocationError):
+    pass
+
+
+class AlreadyAllocatedOrderLineError(AllocationError):
     pass
