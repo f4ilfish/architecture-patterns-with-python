@@ -4,7 +4,8 @@ from typing import Optional, Set
 
 from exceptions import (
     WrongSKUError,
-    NotEnoughQuantityAllocationError, NotAllocatedOrderLineError,
+    NotEnoughQuantityAllocationError,
+    NotAllocatedOrderLineError,
     AlreadyAllocatedOrderLineError,
 )
 
@@ -49,6 +50,21 @@ class Batch:
 
         self._allocated_order_lines: Set[OrderLine] = set()
 
+    def __gt__(self, other) -> bool:
+        if self.eta is None:
+            return False
+        if other.eta is None:
+            return True
+        return self.eta > other.eta
+
+    @property
+    def reference(self) -> str:
+        return self._reference
+
+    @property
+    def eta(self) -> Optional[date]:
+        return self._eta
+
     @property
     def allocated_quantity(self) -> int:
         return sum(ol.quantity for ol in self._allocated_order_lines)
@@ -60,13 +76,22 @@ class Batch:
     def allocate(self, order_line: OrderLine) -> None:
 
         if self._sku != order_line.sku:
-            raise WrongSKUError()
+            raise WrongSKUError(
+                f"Несоответствие SKU партии товара ({self._sku}) "
+                f"и товарной позиции ({order_line.sku})."
+            )
 
         if order_line in self._allocated_order_lines:
-            raise AlreadyAllocatedOrderLineError()
+            raise AlreadyAllocatedOrderLineError(
+                f"Товарная позиция ({order_line.order_id}) "
+                f"уже размещена в партии товара ({self._reference})."
+            )
 
         if self.available_quantity < order_line.quantity:
-            raise NotEnoughQuantityAllocationError()
+            raise NotEnoughQuantityAllocationError(
+                f"Недостаточно ({self.available_quantity}) товара в партии "
+                f"для размещения товарной позиции ({order_line.quantity})"
+            )
 
         self._allocated_order_lines.add(order_line)
         return
@@ -74,10 +99,16 @@ class Batch:
     def deallocate(self, order_line: OrderLine) -> None:
 
         if self._sku != order_line.sku:
-            raise WrongSKUError()
+            raise WrongSKUError(
+                f"Несоответствие SKU партии товара ({self._sku}) "
+                f"и товарной позиции ({order_line.sku})."
+            )
 
         if order_line not in self._allocated_order_lines:
-            raise NotAllocatedOrderLineError()
+            raise NotAllocatedOrderLineError(
+                f"Товарная позиция ({order_line.order_id}) "
+                f"еще не размещена в партии товара ({self._reference})."
+            )
 
         self._allocated_order_lines.remove(order_line)
         return
