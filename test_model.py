@@ -3,9 +3,15 @@ from typing import Tuple, Optional
 
 import pytest
 
-from exceptions import NotEnoughQuantityAllocationError, \
-    WrongSKUError, NotAllocatedOrderLineError, AlreadyAllocatedOrderLineError
+from exceptions import (
+    NotEnoughQuantityAllocationError,
+    WrongSKUError,
+    NotAllocatedOrderLineError,
+    AlreadyAllocatedOrderLineError
+)
+
 from model import Batch, OrderLine
+from service import allocate
 
 today = date.today()
 tomorrow = today + timedelta(days=1)
@@ -71,11 +77,37 @@ def test_allocation_is_idempotent():
 
 
 def test_prefers_warehouse_batches_to_shipments():
-    pytest.fail("todo")
+    warehouse_batch = Batch("warehouse_batch", "sku_1", 10)
+    shipment_batch = Batch("shipment_batch", "sku_1", 10, tomorrow)
+    order_line = OrderLine("order_1", "sku_1", 2)
+
+    allocate(order_line, [warehouse_batch, shipment_batch])
+
+    assert warehouse_batch.available_quantity == 8
+    assert shipment_batch.available_quantity == 10
 
 
 def test_prefers_earlier_batches():
-    pytest.fail("todo")
+    earliest_batch = Batch("earliest_batch", "sku_1", 10, today)
+    medium_batch = Batch("medium_batch", "sku_1", 10, tomorrow)
+    latest_batch = Batch("latest_batch", "sku_1", 10, later)
+    order_line = OrderLine("order_1", "sku_1", 2)
+
+    allocate(order_line, [earliest_batch, medium_batch, latest_batch])
+
+    assert earliest_batch.available_quantity == 8
+    assert medium_batch.available_quantity == 10
+    assert latest_batch.available_quantity == 10
+
+
+def test_returns_allocated_batch_ref():
+    warehouse_batch = Batch("warehouse_batch", "sku_1", 10)
+    shipment_batch = Batch("shipment_batch", "sku_1", 10, tomorrow)
+    order_line = OrderLine("order_1", "sku_1", 2)
+
+    allocation = allocate(order_line, [warehouse_batch, shipment_batch])
+
+    assert allocation == warehouse_batch.reference
 
 
 def _make_equal_sku_line_and_batch(
