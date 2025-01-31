@@ -1,70 +1,114 @@
-from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional, List, Set
+from typing import Optional, Set
 
-
-class OutOfStock(Exception):
-    pass
-
-
-def allocate(line: OrderLine, batches: List[Batch]) -> str:
-    try:
-        batch = next(b for b in sorted(batches) if b.can_allocate(line))
-        batch.allocate(line)
-        return batch.reference
-    except StopIteration:
-        raise OutOfStock(f"Out of stock for sku {line.sku}")
-
+from exceptions import (
+    WrongSKUError,
+    NotEnoughQuantityAllocationError,
+    NotAllocatedOrderLineError,
+    AlreadyAllocatedOrderLineError,
+)
 
 @dataclass(unsafe_hash=True)
 class OrderLine:
-    orderid: str
+    """
+    Товарная позиция (строки)
+
+    Attributes:
+        order_id (str): Ссылка на заказ
+        sku (str): Единица складского учета (stock-keeping unit)
+        quantity (int): Количество
+    """
+
+    order_id: str
     sku: str
-    qty: int
+    quantity: int
 
 
 class Batch:
-    def __init__(self, ref: str, sku: str, qty: int, eta: Optional[date]):
-        self.reference = ref
-        self.sku = sku
-        self.eta = eta
-        self._purchased_quantity = qty
-        self._allocations = set()  # type: Set[OrderLine]
+    """
+    Партия
 
-    def __repr__(self):
-        return f"<Batch {self.reference}>"
+    Attributes:
+        reference (str): Ссылка
+        sku (str): Единица складского учета (stock-keeping unit)
+        quantity (int): Доступное количество
+        eta (date): Предполагаемый срок прибытия (estimated arrival time)
+    """
 
-    def __eq__(self, other):
-        if not isinstance(other, Batch):
-            return False
-        return other.reference == self.reference
+    def __init__(
+        self,
+        reference: str,
+        sku: str,
+        quantity: int,
+        eta: Optional[date] = None
+    ):
+        self._reference = reference
+        self._sku = sku
+        self._purchased_quantity = quantity
+        self._eta = eta
 
-    def __hash__(self):
-        return hash(self.reference)
+        self._allocated_order_lines: Set[OrderLine] = set()
 
-    def __gt__(self, other):
+    def __gt__(self, other) -> bool:
         if self.eta is None:
             return False
         if other.eta is None:
             return True
         return self.eta > other.eta
 
-    def allocate(self, line: OrderLine):
-        if self.can_allocate(line):
-            self._allocations.add(line)
+    @property
+    def reference(self) -> str:
+        return self._reference
 
-    def deallocate(self, line: OrderLine):
-        if line in self._allocations:
-            self._allocations.remove(line)
+    @property
+    def eta(self) -> Optional[date]:
+        return self._eta
 
     @property
     def allocated_quantity(self) -> int:
-        return sum(line.qty for line in self._allocations)
+        return sum(ol.quantity for ol in self._allocated_order_lines)
 
     @property
     def available_quantity(self) -> int:
         return self._purchased_quantity - self.allocated_quantity
 
-    def can_allocate(self, line: OrderLine) -> bool:
-        return self.sku == line.sku and self.available_quantity >= line.qty
+    def allocate(self, order_line: OrderLine) -> None:
+
+        if self._sku != order_line.sku:
+            raise WrongSKUError(
+                f"Несоответствие SKU партии товара ({self._sku}) "
+                f"и товарной позиции ({order_line.sku})."
+            )
+
+        if order_line in self._allocated_order_lines:
+            raise AlreadyAllocatedOrderLineError(
+                f"Товарная позиция ({order_line.order_id}) "
+                f"уже размещена в партии товара ({self._reference})."
+            )
+
+        if self.available_quantity < order_line.quantity:
+            raise NotEnoughQuantityAllocationError(
+                f"Недостаточно ({self.available_quantity}) товара в партии "
+                f"для размещения товарной позиции ({order_line.quantity})"
+            )
+
+        self._allocated_order_lines.add(order_line)
+        return
+
+    def deallocate(self, order_line: OrderLine) -> None:
+
+        if self._sku != order_line.sku:
+            raise WrongSKUError(
+                f"Несоответствие SKU партии товара ({self._sku}) "
+                f"и товарной позиции ({order_line.sku})."
+            )
+
+        if order_line not in self._allocated_order_lines:
+            raise NotAllocatedOrderLineError(
+                f"Товарная позиция ({order_line.order_id}) "
+                f"еще не размещена в партии товара ({self._reference})."
+            )
+
+        self._allocated_order_lines.remove(order_line)
+        return
