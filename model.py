@@ -12,10 +12,10 @@ from exceptions import (
 @dataclass(unsafe_hash=True)
 class OrderLine:
     """
-    Товарная позиция (строки)
+    Заказ (товарная позиция)
 
     Attributes:
-        order_id (str): Ссылка на заказ
+        order_id (str): Идентификатор заказа
         sku (str): Единица складского учета (stock-keeping unit)
         quantity (int): Количество
     """
@@ -24,17 +24,19 @@ class OrderLine:
     sku: str
     quantity: int
 
+    def __str__(self):
+        return f"Заказ {self.order_id} ({self.sku} {self.quantity} шт.)"
+
+    def __repr__(self):
+        return (
+            f"{self.__class__.__name__}"
+            f"(order_id={self.order_id}, sku={self.sku}, "
+            f"quantity={self.quantity})"
+        )
+
 
 class Batch:
-    """
-    Партия
-
-    Attributes:
-        reference (str): Ссылка
-        sku (str): Единица складского учета (stock-keeping unit)
-        quantity (int): Доступное количество
-        eta (date): Предполагаемый срок прибытия (estimated arrival time)
-    """
+    """ Партия """
 
     def __init__(
         self,
@@ -43,6 +45,13 @@ class Batch:
         quantity: int,
         eta: Optional[date] = None
     ):
+        """
+        :param reference: Ссылка
+        :param sku: Единица складского учета (stock-keeping unit)
+        :param quantity: Количество
+        :param eta: Предполагаемый срок прибытия (estimated arrival time)
+        """
+
         self._reference = reference
         self._sku = sku
         self._purchased_quantity = quantity
@@ -56,6 +65,21 @@ class Batch:
         if other.eta is None:
             return True
         return self.eta > other.eta
+
+    def __str__(self):
+        return (
+            f"Партия {self.reference} "
+            f"({self._sku}, всего {self._purchased_quantity} ед., "
+            f"доступно {self.available_quantity} ед., дата {self.eta})"
+        )
+
+    def ___repr___(self):
+        return (
+            f"{self.__class__.__name__}(reference={self.reference}, "
+            f"sku={self._sku}, purchased_quantity={self._purchased_quantity}, "
+            f"eta={self.eta}, "
+            f"allocated_order_line={self._allocated_order_lines})"
+        )
 
     @property
     def reference(self) -> str:
@@ -76,22 +100,13 @@ class Batch:
     def allocate(self, order_line: OrderLine) -> None:
 
         if self._sku != order_line.sku:
-            raise WrongSKUError(
-                f"Несоответствие SKU партии товара ({self._sku}) "
-                f"и товарной позиции ({order_line.sku})."
-            )
+            raise WrongSKUError(self, order_line)
 
         if order_line in self._allocated_order_lines:
-            raise AlreadyAllocatedOrderLineError(
-                f"Товарная позиция ({order_line.order_id}) "
-                f"уже размещена в партии товара ({self._reference})."
-            )
+            raise AlreadyAllocatedOrderLineError(self, order_line)
 
         if self.available_quantity < order_line.quantity:
-            raise NotEnoughQuantityAllocationError(
-                f"Недостаточно ({self.available_quantity}) товара в партии "
-                f"для размещения товарной позиции ({order_line.quantity})"
-            )
+            raise NotEnoughQuantityAllocationError(self, order_line)
 
         self._allocated_order_lines.add(order_line)
         return
@@ -99,16 +114,10 @@ class Batch:
     def deallocate(self, order_line: OrderLine) -> None:
 
         if self._sku != order_line.sku:
-            raise WrongSKUError(
-                f"Несоответствие SKU партии товара ({self._sku}) "
-                f"и товарной позиции ({order_line.sku})."
-            )
+            raise WrongSKUError(self, order_line)
 
         if order_line not in self._allocated_order_lines:
-            raise NotAllocatedOrderLineError(
-                f"Товарная позиция ({order_line.order_id}) "
-                f"еще не размещена в партии товара ({self._reference})."
-            )
+            raise NotAllocatedOrderLineError(self, order_line)
 
         self._allocated_order_lines.remove(order_line)
         return
