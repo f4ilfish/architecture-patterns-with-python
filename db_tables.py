@@ -1,30 +1,56 @@
-from sqlalchemy import Table, MetaData, Column, Integer, String, Date, ForeignKey
+from sqlalchemy import (
+    Table,
+    Column,
+    Integer,
+    String,
+    Date,
+    ForeignKey,
+)
+from sqlalchemy.orm import column_property, registry
 
-metadata = MetaData()
+from model import OrderLine, Batch
+
+mapper_registry = registry()
 
 order_lines = Table(
     "order_lines",
-    metadata,
+    mapper_registry.metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("order_id", String(255)),
     Column("sku", String(255)),
     Column("qty", Integer, nullable=False),
-    Column("orderid", String(255)),
 )
 
 batches = Table(
     "batches",
-    metadata,
+    mapper_registry.metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("reference", String(255)),
     Column("sku", String(255)),
-    Column("_purchased_quantity", Integer, nullable=False),
+    Column("purchased_qty", Integer, nullable=False),
     Column("eta", Date, nullable=True),
 )
 
 allocations = Table(
     "allocations",
-    metadata,
+    mapper_registry.metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("orderline_id", ForeignKey("order_lines.id")),
+    Column("order_line_id", ForeignKey("order_lines.id")),
     Column("batch_id", ForeignKey("batches.id")),
+)
+
+mapper_registry.map_imperatively(
+    OrderLine,
+    order_lines,
+    properties={
+        "quantity": column_property(order_lines.c.qty),
+    }
+)
+
+mapper_registry.map_imperatively(
+    Batch,
+    batches,
+    properties={
+        "purchased_quantity": column_property(batches.c.purchased_qty)
+    }
 )
