@@ -86,6 +86,10 @@ class Batch:
         return self._reference
 
     @property
+    def purchased_quantity(self) -> int:
+        return self._purchased_quantity
+
+    @property
     def eta(self) -> Optional[date]:
         return self._eta
 
