@@ -4,8 +4,8 @@ from typing import Optional, Set
 
 from exceptions import (
     WrongSKUError,
-    NotEnoughQuantityAllocationError,
-    NotAllocatedOrderLineError,
+    NotEnoughQuantityToAllocationError,
+    NotYetAllocatedOrderLineError,
     AlreadyAllocatedOrderLineError,
 )
 
@@ -15,22 +15,22 @@ class OrderLine:
     Заказ (товарная позиция)
 
     Attributes:
-        order_id (str): Идентификатор заказа
+        oid (int): Идентификатор заказа
         sku (str): Единица складского учета (stock-keeping unit)
         quantity (int): Количество
     """
 
-    order_id: str
+    oid: int
     sku: str
     quantity: int
 
     def __str__(self):
-        return f"Заказ {self.order_id} ({self.sku} {self.quantity} шт.)"
+        return f"Заказ {self.oid} ({self.sku} {self.quantity} шт.)"
 
     def __repr__(self):
         return (
             f"{self.__class__.__name__}"
-            f"(order_id={self.order_id}, sku={self.sku}, "
+            f"(order_id={self.oid}, sku={self.sku}, "
             f"quantity={self.quantity})"
         )
 
@@ -48,16 +48,15 @@ class Batch:
         """
         :param reference: Ссылка
         :param sku: Единица складского учета (stock-keeping unit)
-        :param quantity: Количество
-        :param eta: Предполагаемый срок прибытия (estimated arrival time)
+        :param quantity: Количество ед. товаров
+        :param eta: Предполагаемый срок прибытия (estimated time arrival)
         """
 
         self._reference = reference
         self._sku = sku
-        self._purchased_quantity = quantity
+        self._quantity = quantity
         self._eta = eta
-
-        self._allocated_order_lines: Set[OrderLine] = set()
+        self._allocations: Set[OrderLine] = set()
 
     def __gt__(self, other) -> bool:
         if self.eta is None:
@@ -68,17 +67,18 @@ class Batch:
 
     def __str__(self):
         return (
-            f"Партия {self.reference} "
-            f"({self._sku}, всего {self._purchased_quantity} ед., "
-            f"доступно {self.available_quantity} ед., дата {self.eta})"
+            f"Партия {self.reference} ({self._sku}, "
+            f"всего {self._quantity} ед., "
+            f"размещено {self.allocated_quantity} ед., "
+            f"доступно {self.available_quantity} ед., "
+            f"предполагаемый срок прибытия {self.eta})"
         )
 
     def ___repr___(self):
         return (
             f"{self.__class__.__name__}(reference={self.reference}, "
-            f"sku={self._sku}, purchased_quantity={self._purchased_quantity}, "
-            f"eta={self.eta}, "
-            f"allocated_order_line={self._allocated_order_lines})"
+            f"sku={self._sku}, purchased_quantity={self._quantity}, "
+            f"eta={self.eta}, allocations={self._allocations})"
         )
 
     @property
@@ -86,42 +86,69 @@ class Batch:
         return self._reference
 
     @property
-    def purchased_quantity(self) -> int:
-        return self._purchased_quantity
+    def sku(self) -> str:
+        return self._sku
+
+    @property
+    def quantity(self) -> int:
+        return self._quantity
 
     @property
     def eta(self) -> Optional[date]:
         return self._eta
 
     @property
+    def allocations(self) -> Set[OrderLine]:
+        return self._allocations
+
+    @property
     def allocated_quantity(self) -> int:
-        return sum(ol.quantity for ol in self._allocated_order_lines)
+        return sum(ol.quantity for ol in self._allocations)
 
     @property
     def available_quantity(self) -> int:
-        return self._purchased_quantity - self.allocated_quantity
+        return self._quantity - self.allocated_quantity
 
     def allocate(self, order_line: OrderLine) -> None:
-
         if self._sku != order_line.sku:
-            raise WrongSKUError(self, order_line)
+            raise WrongSKUError(
+                self._reference,
+                self._sku,
+                order_line.oid,
+                order_line.sku
+            )
 
-        if order_line in self._allocated_order_lines:
-            raise AlreadyAllocatedOrderLineError(self, order_line)
+        if order_line in self._allocations:
+            raise AlreadyAllocatedOrderLineError(
+                self._reference,
+                order_line.oid,
+            )
 
         if self.available_quantity < order_line.quantity:
-            raise NotEnoughQuantityAllocationError(self, order_line)
+            raise NotEnoughQuantityToAllocationError(
+                self._reference,
+                self._quantity,
+                order_line.oid,
+                order_line.quantity,
+            )
 
-        self._allocated_order_lines.add(order_line)
-        return
+        self._allocations.add(order_line)
+        return None
 
     def deallocate(self, order_line: OrderLine) -> None:
-
         if self._sku != order_line.sku:
-            raise WrongSKUError(self, order_line)
+            raise WrongSKUError(
+                self._reference,
+                self._sku,
+                order_line.oid,
+                order_line.sku
+            )
 
-        if order_line not in self._allocated_order_lines:
-            raise NotAllocatedOrderLineError(self, order_line)
+        if order_line not in self._allocations:
+            raise NotYetAllocatedOrderLineError(
+                self._reference,
+                order_line.oid,
+            )
 
-        self._allocated_order_lines.remove(order_line)
+        self._allocations.remove(order_line)
         return

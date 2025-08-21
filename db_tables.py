@@ -6,51 +6,66 @@ from sqlalchemy import (
     Date,
     ForeignKey,
 )
-from sqlalchemy.orm import column_property, registry
+from sqlalchemy.orm import registry, relationship
 
 from model import OrderLine, Batch
 
+
 mapper_registry = registry()
+metadata = mapper_registry.metadata
+
 
 order_lines = Table(
     "order_lines",
-    mapper_registry.metadata,
-    Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("order_id", String(255)),
+    metadata,
+Column("id", Integer, primary_key=True, autoincrement=True),
     Column("sku", String(255)),
     Column("qty", Integer, nullable=False),
 )
 
 batches = Table(
     "batches",
-    mapper_registry.metadata,
+    metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("reference", String(255)),
     Column("sku", String(255)),
-    Column("purchased_qty", Integer, nullable=False),
+    Column("quantity", Integer, nullable=False),
     Column("eta", Date, nullable=True),
 )
 
 allocations = Table(
     "allocations",
-    mapper_registry.metadata,
+    metadata,
     Column("id", Integer, primary_key=True, autoincrement=True),
-    Column("order_line_id", ForeignKey("order_lines.id")),
     Column("batch_id", ForeignKey("batches.id")),
-)
-
-mapper_registry.map_imperatively(
-    OrderLine,
-    order_lines,
-    properties={
-        "quantity": column_property(order_lines.c.qty),
-    }
+    Column("order_line_id", ForeignKey("order_lines.id")),
 )
 
 mapper_registry.map_imperatively(
     Batch,
     batches,
     properties={
-        "purchased_quantity": column_property(batches.c.purchased_qty)
+        "_reference": batches.c.reference,
+        "_sku": batches.c.sku,
+        "_quantity": batches.c.quantity,
+        "_eta": batches.c.eta,
+        "order_lines": relationship(
+            OrderLine,
+            secondary=allocations,
+            back_populates="batches",
+        ),
+    },
+)
+
+mapper_registry.map_imperatively(
+    OrderLine,
+    order_lines,
+    properties={
+        "oid": order_lines.c.id,
+        "batches": relationship(
+            Batch,
+            secondary=allocations,
+            back_populates="order_lines",
+        ),
     }
 )

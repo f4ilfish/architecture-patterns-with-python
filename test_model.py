@@ -4,9 +4,9 @@ from typing import Tuple, Optional
 import pytest
 
 from exceptions import (
-    NotEnoughQuantityAllocationError,
+    NotEnoughQuantityToAllocationError,
     WrongSKUError,
-    NotAllocatedOrderLineError,
+    NotYetAllocatedOrderLineError,
     AlreadyAllocatedOrderLineError
 )
 
@@ -35,7 +35,7 @@ def test_can_allocate_if_available_greater_than_required():
 def test_cannot_allocate_if_available_smaller_than_required():
     batch, order_line = _make_equal_sku_line_and_batch("sku_1", 2, 10)
 
-    with pytest.raises(NotEnoughQuantityAllocationError):
+    with pytest.raises(NotEnoughQuantityToAllocationError):
         batch.allocate(order_line)
         assert batch.available_quantity == 2
 
@@ -73,7 +73,7 @@ def test_can_only_deallocate_allocated_lines():
         unallocated_order_line,
     ) = _make_equal_sku_line_and_batch("sku_1", 10, 2)
 
-    with pytest.raises(NotAllocatedOrderLineError):
+    with pytest.raises(NotYetAllocatedOrderLineError):
         batch.deallocate(unallocated_order_line)
         assert batch.available_quantity == 10
 
